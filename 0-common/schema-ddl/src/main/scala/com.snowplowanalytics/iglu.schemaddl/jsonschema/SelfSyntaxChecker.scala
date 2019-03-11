@@ -57,7 +57,7 @@ object SelfSyntaxChecker extends AbstractSyntaxChecker("self", NodeType.OBJECT) 
         val pointer = for {
           JObject(schemaFields) <- jsonObject.get("schema")
           JString(pointer) <- schemaFields.toMap.get("pointer")
-        } yield JsonPointer.parse(pointer).fold(identity, identity)
+        } yield JsonPointer.parseSchemaPointer(pointer).fold(identity, identity)
         val keyword = jsonObject.get("keyword").flatMap {
           case JString(kw) => Some(kw)
           case _ => None

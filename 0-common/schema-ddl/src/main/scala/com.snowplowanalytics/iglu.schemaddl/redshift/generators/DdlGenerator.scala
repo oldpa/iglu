@@ -14,22 +14,17 @@ package com.snowplowanalytics.iglu.schemaddl
 package redshift
 package generators
 
-// Scalaz
-import cats.data.NonEmptyList
-
-// Scala
 import scala.annotation.tailrec
 
-// Iglu core
+import cats.data.NonEmptyList
+
 import com.snowplowanalytics.iglu.core.SchemaMap
 
-// This project
 import EncodeSuggestions._
 import TypeSuggestions._
+import jsonschema.{ Schema, JsonPointer }
 
-/**
- * Generates a Redshift DDL File from a Flattened JsonSchema
- */
+/** Generates a Redshift DDL File from a Flattened JsonSchema */
 object DdlGenerator {
 
   /**
@@ -54,17 +49,14 @@ object DdlGenerator {
    * @param size default length for VARCHAR
    * @return CreateTable object with all data about table creation
    */
-  def generateTableDdl(
-      flatSchema: FlatSchema,
-      name: String,
-      dbSchema: Option[String],
-      size: Int,
-      rawMode: Boolean = false)
+  def generateTableDdl(flatSchema: FlatSchema,
+                       name: String,
+                       dbSchema: Option[String],
+                       size: Int,
+                       rawMode: Boolean = false)
   : CreateTable = {
 
-    val columns = getColumnsDdl(flatSchema.elems, flatSchema.required, size)
-                    .toList
-                    .sortBy(c => (-c.columnConstraints.size, c.columnName))
+    val columns = getColumnsDdl(flatSchema, size).sortBy(c => (-c.columnConstraints.size, c.columnName))
     
     if (rawMode) getRawTableDdl(dbSchema, name, columns)
     else getAtomicTableDdl(dbSchema, name, columns)
@@ -142,30 +134,24 @@ object DdlGenerator {
    * Processes the Map of Data elements pulled from the JsonSchema and
    * generates DDL object for it with it's name, constrains, attributes
    * data type, etc
-   *
-   * @param flatDataElems The Map of Schema keys -> attributes which need to
-   *                      be processed
-   * @param required required fields to decide which columns are nullable
-   * @return a list of Column DDLs
    */
-  private[schemaddl] def getColumnsDdl(
-      flatDataElems: PropertyList,
-      required: Set[String],
-      varcharSize: Int)
-  : Iterable[Column] = {
-
-    // Process each key pair in the map
+  private[schemaddl] def getColumnsDdl(flatSchema: FlatSchema, varcharSize: Int): List[Column] = {
     for {
-      (columnName, properties) <- flatDataElems
-    } yield {
-      val dataType = getDataType(properties, varcharSize, columnName)
-      val encoding = getEncoding(properties, dataType, columnName)
-      val constraints =    // only "NOT NULL" now
-        if (checkNullability(properties, required.contains(columnName))) Set.empty[ColumnConstraint]
+      (jsonPointer, schema) <- flatSchema.subschemas
+      columnName = getName(jsonPointer)
+      dataType = getDataType(schema, varcharSize, columnName)
+      encoding = getEncoding(schema, dataType, columnName)
+      constraints =
+        if (checkNullability(schema, flatSchema.required.contains(jsonPointer))) Set.empty[ColumnConstraint]
         else Set[ColumnConstraint](Nullability(NotNull))
-      Column(columnName, dataType, columnAttributes = Set(encoding), columnConstraints = constraints)
-    }
+    } yield Column(columnName, dataType, columnAttributes = Set(encoding), columnConstraints = constraints)
   }
+
+  def getName(jsonPointer: JsonPointer): String =
+    jsonPointer.value.map {
+      case JsonPointer.Cursor.DownField(f) => StringUtils.snakeCase(f)
+      case cursor => throw new IllegalArgumentException(s"Unexpected $cursor cursor in ${jsonPointer.show}")
+    } mkString "."
 
   // List of data type suggestions
   val dataTypeSuggestions: List[DataTypeSuggestion] = List(
@@ -199,7 +185,7 @@ object DdlGenerator {
    * @return some format or none if nothing suites
    */
   @tailrec private[schemaddl] def getDataType(
-      properties: Map[String, String],
+      properties: Schema,
       varcharSize: Int,
       columnName: String,
       suggestions: List[DataTypeSuggestion] = dataTypeSuggestions)
@@ -227,7 +213,7 @@ object DdlGenerator {
    * @return some format or none if nothing suites
    */
   @tailrec private[schemaddl] def getEncoding(
-      properties: Map[String, String],
+      properties: Schema,
       dataType: DataType,
       columnName: String,
       suggestions: List[EncodingSuggestion] = encodingSuggestions)
@@ -253,11 +239,10 @@ object DdlGenerator {
    * @param required whether this field listed in required array
    * @return nullable or not
    */
-  private[schemaddl] def checkNullability(properties: Map[String, String], required: Boolean): Boolean = {
-    (properties.get("type"), properties.get("enum")) match {
-      case (Some(types), _) if types.contains("null") => true
-      case (_, Some(enum)) if enum.split(",").toList.contains("null") => true
+  private[schemaddl] def checkNullability(properties: Schema, required: Boolean): Boolean =
+    (properties.`type`, properties.enum) match {
+      case (Some(types), _) if types.nullable => true
+      case (_, Some(enum)) if enum.value.exists(_.isNull) => true
       case _ => !required
     }
-  }
 }

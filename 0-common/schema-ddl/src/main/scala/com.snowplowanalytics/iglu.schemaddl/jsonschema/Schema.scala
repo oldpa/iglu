@@ -59,6 +59,10 @@ case class Schema(multipleOf:           Option[NumberProperty.MultipleOf]       
 }
 
 object Schema {
+
+  /** Schema not containing any other child schemas */
+  case class Primitive(schema: Schema) extends AnyVal
+
   /**
    * Parse arbitrary JSON AST as Schema class
    *
@@ -131,4 +135,7 @@ object Schema {
 
     go(schema, JsonPointer.Root)
   }
+
+  val empty: Schema = Schema(None, None, None, None, None, None, None, None, None, None, None,
+    None, None, None, None, None, None, None, None)
 }

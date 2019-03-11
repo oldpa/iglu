@@ -23,6 +23,11 @@ case class JsonPointer private(value: List[Cursor]) extends AnyVal {
 
   def last = value.headOption
 
+  def parent = value match {
+    case Nil => None
+    case _ :: t => Some(JsonPointer(t))
+  }
+
   def show: String = "/" ++ (get.map {
     case Cursor.DownField(key) => key
     case Cursor.DownProperty(property) => property.key.name
@@ -35,11 +40,20 @@ case class JsonPointer private(value: List[Cursor]) extends AnyVal {
     JsonPointer(Cursor.DownField(key) :: value)
   def at(index: Int): JsonPointer =
     JsonPointer(Cursor.At(index) :: value)
+
+  def forData: DataPointer =
+    DataPointer(value.collect {
+      case cur: JsonPointer.Cursor.DownProperty => cur
+    })
 }
 
 object JsonPointer {
 
   val Root = JsonPointer(Nil)
+
+  /** JSON Pointer that cannot have `CursorProperty` */
+  case class DataPointer private(value: List[Cursor]) extends AnyVal
+
 
   sealed trait SchemaProperty extends Product with Serializable {
     import SchemaProperty._
@@ -57,8 +71,8 @@ object JsonPointer {
       case AdditionalItems      => i => fromString(i).map(Cursor.DownProperty.apply)
       case AdditionalProperties => i => fromString(i).map(Cursor.DownProperty.apply)
     }
-
   }
+
   object SchemaProperty {
     case object Items extends SchemaProperty { def key = 'items }
     case object AdditionalItems extends SchemaProperty { def key = 'additionalItems }
@@ -78,7 +92,7 @@ object JsonPointer {
     * In case structure of fields is incorrect it fallbacks to Left all-DownField,
     * which gives same string representation, but can be wrong semantically
     */
-  def parse(string: String): Either[JsonPointer, JsonPointer] = {
+  def parseSchemaPointer(string: String): Either[JsonPointer, JsonPointer] = {
     @tailrec def go(remaining: List[String], acc: JsonPointer): Either[JsonPointer, JsonPointer] = {
       remaining match {
         case Nil => acc.asRight
@@ -107,7 +121,6 @@ object JsonPointer {
 
     go(string.split("/").filter(_.nonEmpty).toList, Root)
   }
-
 
   sealed trait Cursor
   object Cursor {

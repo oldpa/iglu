@@ -12,17 +12,13 @@
  */
 package com.snowplowanalytics.iglu
 
-// Scala
-import scala.collection.immutable.ListMap
-
 // cats
 import cats.data.Validated
 
-// json4s
-import org.json4s.JValue
-
 // Iglu Core
 import core.{ SchemaMap, SelfDescribingSchema }
+
+import schemaddl.jsonschema.{ Schema, JsonPointer }
 
 package object schemaddl {
   /**
@@ -30,7 +26,7 @@ package object schemaddl {
    * First-level key is arbitrary property (like id, name etc)
    * Second-level is map of JSON Schema properties (type, enum etc)
    */
-  type PropertyList = ListMap[String, Map[String, String]]
+  type PropertyList = List[(JsonPointer, Schema)]
 
   /**
    * Map of Schemas to all its possible target schemas
@@ -45,7 +41,7 @@ package object schemaddl {
   /**
    * Failure-aware version of [[MigrationMap]]
    */
-  type ValidMigrationMap = Map[SchemaMap, Validated[String, List[Migration]]]
+  type ValidMigrationMap = Map[SchemaMap, List[Migration]]
 
   /**
    * Schema criterion restricted to revision: vendor/name/m-r-*
@@ -75,6 +71,6 @@ package object schemaddl {
   /**
    * Self-describing Schema container for JValue
    */
-  type IgluSchema = SelfDescribingSchema[JValue]
+  type IgluSchema = SelfDescribingSchema[Schema]
 
 }

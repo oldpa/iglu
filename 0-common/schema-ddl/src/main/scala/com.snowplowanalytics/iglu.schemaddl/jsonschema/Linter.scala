@@ -385,33 +385,5 @@ object Linter {
       if (value) ().valid[A] else message.invalid
   }
 
-  /**
-    * Pimp JSON Schema AST with method checking presence of some JSON type
-    */
-  private[schemaddl] implicit class SchemaOps(val value: Schema) extends AnyVal {
-    /** Check if Schema has no specific type *OR* has no type at all */
-    def withoutType(jsonType: Type): Boolean =
-      value.`type` match {
-        case Some(Type.Union(types)) => !types.contains(jsonType)
-        case Some(t) => t != jsonType
-        case None => false            // absent type is ok
-      }
-
-    /** Check if Schema has no specific type *OR* has no type at all */
-    def withType(jsonType: Type): Boolean =
-      value.`type` match {
-        case Some(Type.Union(types)) => types.contains(jsonType)
-        case Some(t) => t == jsonType
-        case None => false            // absent type is ok
-      }
-
-    /** Check if Schema has specified format */
-    def withFormat(format: Format): Boolean =
-      value.format match {
-        case Some(f) => format == f
-        case None => false
-      }
-  }
-
   private def noIssues = ().valid[Nothing]
 }
